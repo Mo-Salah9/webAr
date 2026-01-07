@@ -4,9 +4,8 @@ import { TransformMode, ModelTransform } from './types.ts';
 import OverlayUI from './components/OverlayUI.tsx';
 import { getARInsights } from './services/gemini.ts';
 
-// Declarations for MindAR/Three global variables loaded via script tags
+// Declare globals provided by script tags
 declare const THREE: any;
-declare const MindARThree: any;
 
 const INITIAL_TRANSFORM: ModelTransform = {
   position: { x: 0, y: 0, z: 0 },
@@ -24,6 +23,7 @@ export default function App() {
   const [transform, setTransform] = useState<ModelTransform>(INITIAL_TRANSFORM);
   const [aiInsights, setAiInsights] = useState<{ analysis: string; suggestions: string[] } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize MindAR
   useEffect(() => {
@@ -31,6 +31,14 @@ export default function App() {
 
     const startAR = async () => {
       try {
+        // MindAR is typically namespaced under window.MINDAR.IMAGE
+        const MINDAR = (window as any).MINDAR;
+        if (!MINDAR || !MINDAR.IMAGE || !MINDAR.IMAGE.MindARThree) {
+          throw new Error("MindAR library not found. Ensure script tags are loaded correctly.");
+        }
+
+        const MindARThree = MINDAR.IMAGE.MindARThree;
+
         const mindarThree = new MindARThree({
           container: containerRef.current,
           imageTargetSrc: 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind',
@@ -49,6 +57,10 @@ export default function App() {
         scene.add(directionalLight);
 
         // Load 3D Model - Using global loader attached to THREE
+        if (!THREE.GLTFLoader) {
+          throw new Error("THREE.GLTFLoader not found. Ensure script tags are loaded correctly.");
+        }
+
         const loader = new THREE.GLTFLoader();
         loader.load(
           'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softbar/scene.gltf',
@@ -60,8 +72,9 @@ export default function App() {
             setIsLoading(false);
           },
           undefined,
-          (error: any) => {
-            console.error("Error loading model:", error);
+          (err: any) => {
+            console.error("Error loading model:", err);
+            setError("Failed to load 3D model.");
             setIsLoading(false);
           }
         );
@@ -74,17 +87,23 @@ export default function App() {
         renderer.setAnimationLoop(() => {
           renderer.render(scene, camera);
         });
-      } catch (error) {
-        console.error("Failed to start AR:", error);
+      } catch (err: any) {
+        console.error("Failed to start AR:", err);
+        setError(err.message || "An error occurred starting the AR engine.");
         setIsLoading(false);
       }
     };
 
-    startAR();
+    // Small delay to ensure scripts in index.html are parsed/ready
+    const timeoutId = setTimeout(startAR, 500);
 
     return () => {
+      clearTimeout(timeoutId);
       if (mindARRef.current) {
         mindARRef.current.stop();
+        if (mindARRef.current.renderer) {
+          mindARRef.current.renderer.setAnimationLoop(null);
+        }
       }
     };
   }, []);
@@ -136,8 +155,8 @@ export default function App() {
     try {
       const insights = await getARInsights("Virtual Softbar Interactive Object");
       setAiInsights(insights);
-    } catch (error) {
-      console.error("AI Analysis failed", error);
+    } catch (err) {
+      console.error("AI Analysis failed", err);
     }
   };
 
@@ -149,6 +168,21 @@ export default function App() {
       modelRef.current.scale.set(INITIAL_TRANSFORM.scale, INITIAL_TRANSFORM.scale, INITIAL_TRANSFORM.scale);
     }
   };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-black text-white p-6 text-center">
+        <h2 className="text-xl font-bold text-red-500 mb-4">AR Initialization Error</h2>
+        <p className="text-gray-300 mb-6">{error}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-6 py-2 bg-blue-600 rounded-full font-medium"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div 
