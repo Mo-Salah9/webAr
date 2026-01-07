@@ -1,0 +1,7 @@
+{
+  "name": "VisionAR: Interactive Image Tracking",
+  "description": "A high-performance Augmented Reality web application that detects specific images to spawn interactive 3D models with move, rotate, and scale capabilities.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
